@@ -5,8 +5,8 @@
  * by R. Terry Lessly
  *
  *******************************************************************************/
-#ifndef _IRDetector_H_
-#define _IRDetector_H_
+#ifndef _IRProximitySensor_H_
+#define _IRProximitySensor_H_
 
 #include <inttypes.h>
 #include <EventSource.h>
@@ -17,7 +17,7 @@ class IRProximitySensor : public EventSource
     public: static const uint8_t MODE_STATECHANGE = 0;
     public: static const uint8_t MODE_CONTINUOUS  = 1;
     
-    public: static EVENT_ID PROXIMITY_EVENT;
+    public: static const EVENT_ID PROXIMITY_EVENT = (EventSourceID::IRProximity | EventCode::Detect);
 
     //**************************************************************
     // Constructors

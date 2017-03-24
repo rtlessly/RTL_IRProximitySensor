@@ -17,7 +17,7 @@
 static DebugHelper Debug("IRProximitySensor");
 
 
-EVENT_ID IRProximitySensor::PROXIMITY_EVENT = EventSource::GenerateEventID();
+//EVENT_ID IRProximitySensor::PROXIMITY_EVENT = EventSource::GenerateEventID();
 
 
 IRProximitySensor::IRProximitySensor(const uint8_t pin, const uint8_t mode)
