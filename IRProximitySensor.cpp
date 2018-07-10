@@ -8,25 +8,22 @@
 #define DEBUG 0
 
 #include <Arduino.h>
-#include <Debug.h>
+#include <RTL_StdLib.h>
 #include "IRProximitySensor.h"
 
-#define SENSITIVITY 8 // Number of consecutive triggers needed to set state
+
+DEFINE_CLASSNAME(IRProximitySensor);
 
 
-static DebugHelper Debug("IRProximitySensor");
-
-
-//EVENT_ID IRProximitySensor::PROXIMITY_EVENT = EventSource::GenerateEventID();
-
-
-IRProximitySensor::IRProximitySensor(const uint8_t pin, const uint8_t mode)
+IRProximitySensor::IRProximitySensor(const uint8_t pin, const uint8_t sensitivity, const uint8_t mode)
 {
+    _id = "IRProximitySensor";
     _state.Pin = pin;
     _state.Mode = mode;
+    _state.Sensitivity = sensitivity;
+    _state.TriggerCount = 0;
     _state.Triggered = false;
     _state.LastTrigger = false;
-    _state.TriggerCount = 0;
 
     pinMode(_state.Pin, INPUT);
 }
@@ -34,7 +31,17 @@ IRProximitySensor::IRProximitySensor(const uint8_t pin, const uint8_t mode)
 
 void IRProximitySensor::Poll()
 {
-    Read();
+    TRACE(Logger(_classname_, this) << F("Poll")  << endl); 
+    
+    auto prevTrigger = _state.Triggered;
+    auto currTrigger = Read();
+
+    // Post an event when in CONTINUOUS mode or the state has changed
+    if (_state.Mode == MODE_CONTINUOUS || currTrigger != prevTrigger)
+    {
+        QueueEvent(PROXIMITY_EVENT, currTrigger);
+        //DispatchEvent(PROXIMITY_EVENT, _state.Triggered);
+    }
 }
 
 
@@ -53,30 +60,22 @@ bool IRProximitySensor::Read()
     bool lastTrigger = _state.LastTrigger;
 
     _state.TriggerCount = (newTrigger == lastTrigger) ? (_state.TriggerCount + 1) : 0;
-
-    Debug.Log("Read => newTrigger=%b, lastTrigger=%b, _state.TriggerCount=%i", newTrigger, lastTrigger, _state.TriggerCount);
-
+    TRACE(Logger(_classname_, this) << F("Read: newTrigger=") << newTrigger 
+                                    << F(", lastTrigger=") << lastTrigger 
+                                    << F(", _state.TriggerCount=") << _state.TriggerCount 
+                                    << F(", _state.Sensitivity=") << _state.Sensitivity 
+                                    << endl);
     _state.LastTrigger = newTrigger;
 
     // Update the state if trigger sensitivity is exceeded.
     // NOTE: The state may not change if the previous state was just re-triggered.
-    if (_state.TriggerCount >= SENSITIVITY)
+    if (_state.TriggerCount >= _state.Sensitivity)
     {
-        Debug.Log("Read => Sensitivity triggered");
-        _state.TriggerCount = 0;
-
-        // When in STATE_CHANGE mode only send an event when the state has changed,
-        // so if the state didn't change then don't do anything (i.e., just return)
-        if (_state.Mode == MODE_STATECHANGE && newTrigger == _state.Triggered) return;
-
-        // Otherwise, send an event
+        TRACE(Logger(_classname_, this) << F("Read: Sensitivity triggered") << endl);
         _state.Triggered = newTrigger;
-
-        Event event(PROXIMITY_EVENT, _state.Triggered);
-
-        DispatchEvent(&event);
+        _state.TriggerCount = 0;
     }
 
-    Debug.Log("Read => state=", (_state.Triggered ? "TRIGGERED" : "NOT TRIGGERED"));
+    TRACE(Logger(_classname_, this) << F("Read: Triggered=") << _state.Triggered << endl);
     return _state.Triggered;
 }
