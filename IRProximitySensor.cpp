@@ -9,7 +9,7 @@
 
 #include <Arduino.h>
 #include <RTL_StdLib.h>
-#include "IRProximitySensor.h"
+#include "RTL_IRProximitySensor.h"
 
 
 DEFINE_CLASSNAME(IRProximitySensor);
@@ -17,13 +17,12 @@ DEFINE_CLASSNAME(IRProximitySensor);
 
 IRProximitySensor::IRProximitySensor(const uint8_t pin, const uint8_t sensitivity, const uint8_t mode)
 {
-    _id = "IRProximitySensor";
     _state.Pin = pin;
     _state.Mode = mode;
-    _state.Sensitivity = sensitivity;
+    _state.Sensitivity = constrain(sensitivity, 1, 15);
     _state.TriggerCount = 0;
-    _state.Triggered = false;
-    _state.LastTrigger = false;
+    _state.Value = NOT_TRIGGERED;
+    _state.PrevReading = _state.Value;
 
     pinMode(_state.Pin, INPUT);
 }
@@ -33,22 +32,21 @@ void IRProximitySensor::Poll()
 {
     TRACE(Logger(_classname_, this) << F("Poll")  << endl); 
     
-    auto prevTrigger = _state.Triggered;
+    auto prevTrigger = _state.Value;
     auto currTrigger = Read();
 
     // Post an event when in CONTINUOUS mode or the state has changed
     if (_state.Mode == MODE_CONTINUOUS || currTrigger != prevTrigger)
     {
         QueueEvent(PROXIMITY_EVENT, currTrigger);
-        //DispatchEvent(PROXIMITY_EVENT, _state.Triggered);
     }
 }
 
 
-void IRProximitySensor::Reset()
+void IRProximitySensor::Reset(bool triggerState)
 {
-    _state.Triggered = false;
-    _state.LastTrigger = false;
+    _state.Value = triggerState;
+    _state.PrevReading = _state.Value;
     _state.TriggerCount = 0;
 }
 
@@ -56,26 +54,30 @@ void IRProximitySensor::Reset()
 bool IRProximitySensor::Read()
 {
     // read the IR sensor line
-    bool newTrigger = (digitalRead(_state.Pin) == LOW);
-    bool lastTrigger = _state.LastTrigger;
+    auto newReading = (digitalRead(_state.Pin) == LOW);
 
-    _state.TriggerCount = (newTrigger == lastTrigger) ? (_state.TriggerCount + 1) : 0;
-    TRACE(Logger(_classname_, this) << F("Read: newTrigger=") << newTrigger 
-                                    << F(", lastTrigger=") << lastTrigger 
-                                    << F(", _state.TriggerCount=") << _state.TriggerCount 
-                                    << F(", _state.Sensitivity=") << _state.Sensitivity 
+    TRACE(Logger(_classname_, this) << F("Read: newReading=") << newReading
+                                    << F(", _state.PrevReading=") << _state.PrevReading
+                                    << F(", _state.TriggerCount=") << _state.TriggerCount
+                                    << F(", _state.Sensitivity=") << _state.Sensitivity
+                                    << F(", _state.Value=") << _state.Value
                                     << endl);
-    _state.LastTrigger = newTrigger;
 
-    // Update the state if trigger sensitivity is exceeded.
+    // Update the triggered state if trigger sensitivity is exceeded.
     // NOTE: The state may not change if the previous state was just re-triggered.
-    if (_state.TriggerCount >= _state.Sensitivity)
+    if (newReading == _state.PrevReading)
     {
-        TRACE(Logger(_classname_, this) << F("Read: Sensitivity triggered") << endl);
-        _state.Triggered = newTrigger;
+        if (++_state.TriggerCount >= _state.Sensitivity) _state.Value = newReading;
+    }
+    else
+    {
         _state.TriggerCount = 0;
     }
 
-    TRACE(Logger(_classname_, this) << F("Read: Triggered=") << _state.Triggered << endl);
-    return _state.Triggered;
+    _state.PrevReading = newReading;
+
+    TRACE(Logger(_classname_, this) << F("Read: _state.Value=") << _state.Value << endl);
+
+    return _state.Value;
 }
+
